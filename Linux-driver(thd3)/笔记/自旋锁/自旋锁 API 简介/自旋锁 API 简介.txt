@@ -1,0 +1,19 @@
+一.
+	1）自旋锁原语要求的包含文件是 <linux/spinlock.h>. 一个实际的锁有类型 spinlock_t.
+	象任何其他数据结构, 一个 自旋锁必须初始化. 这个初始化可以在编译时完成, 如下:
+	spinlock_t my_lock = SPIN_LOCK_UNLOCKED;
+	或者在运行时使用: void spin_lock_init(spinlock_t *lock);
+	
+	2）在进入一个临界区前, 你的代码必须获得需要的 lock , 用:
+	void spin_lock(spinlock_t *lock);
+	注意所有的自旋锁等待是, 由于它们的特性, 不可中断的. 一旦你调用 spin_lock, 你将
+	自旋直到锁变为可用.
+	
+	3）为释放一个你已获得的锁, 传递它给:
+	void spin_unlock(spinlock_t *lock);
+	
+	有很多其他的自旋锁函数, 我们将很快都看到. 但是没有一个背离上面列出的函数所展示
+	的核心概念. 除了加锁和释放, 没有什么可对一个锁所作的.
+	
+	
+	

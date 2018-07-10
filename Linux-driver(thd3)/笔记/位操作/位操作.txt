@@ -1,0 +1,50 @@
+atomic_t 类型在进行整数算术时是不错的. 但是, 它无法工作的好, 当你需要以原子方
+式操作单个位时. 为此, 内核提供了一套函数来原子地修改或测试单个位. 因为整个操作
+在单步内发生, 没有中断(或者其他处理器)能干扰.
+
+原子位操作非常快, 因为它们使用单个机器指令来进行操作, 而在任何时候低层平台做的
+时候不用禁止中断. 函数是体系依赖的并且在 <asm/bitops.h> 中声明. 它们保证是原子
+的, 即便在 SMP 计算机上, 并且对于跨处理器保持一致是有用的.
+
+不幸的是, 键入这些函数中的数据也是体系依赖的. nr 参数(描述要操作哪个位)常常定
+义为 int, 但是在几个体系中是 unsigned long. 要修改的地址常常是一个 unsigned
+long 指针, 但是几个体系使用 void * 代替.
+
+各种位操作是:
+void set_bit(nr, void *addr);
+设置第 nr 位在 addr 指向的数据项中.
+
+void clear_bit(nr, void *addr);
+清除指定位在 addr 处的无符号长型数据. 它的语义与 set_bit 的相反.
+
+void change_bit(nr, void *addr);
+翻转这个位.
+
+test_bit(nr, void *addr);
+这个函数是唯一一个不需要是原子的位操作; 它简单地返回这个位的当前值.
+
+int test_and_set_bit(nr, void *addr);
+int test_and_clear_bit(nr, void *addr);
+int test_and_change_bit(nr, void *addr);
+原子地动作如同前面列出的, 除了它们还返回这个位以前的值.
+
+当这些函数用来存取和修改一个共享的标志, 除了调用它们不用做任何事; 它们以原子发
+生进行它们的操作. 使用位操作来管理一个控制存取一个共享变量的锁变量, 另一方面,
+是有点复杂并且应该有个例子. 大部分现代的代码不以这种方法来使用位操作, 但是象下
+面的代码仍然在内核中存在.
+
+一段需要存取一个共享数据项的代码试图原子地请求一个锁, 使用 test_and_set_bit 或
+者 test_and_clear_bit. 通常的实现展示在这里; 它假定锁是在地址 addr 的 nr 位.
+它还假定当锁空闲是这个位是 0, 忙为 非零.
+/* try to set lock */
+while (test_and_set_bit(nr, addr) != 0)
+wait_for_a_while();
+/* do your work */
+/* release lock, and check... */
+if (test_and_clear_bit(nr, addr) == 0)
+something_went_wrong(); /* already released: error */
+
+如果你通读内核源码, 你会发现象这个例子的代码. 但是, 最好在新代码中使用自旋锁;
+自旋锁很好地调试过, 它们处理问题如同中断和内核抢占, 并且别人读你代码时不必努力
+理解你在做什么.
+

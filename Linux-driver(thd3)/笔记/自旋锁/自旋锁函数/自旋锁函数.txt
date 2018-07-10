@@ -1,0 +1,37 @@
+我们已经看到 2 个函数, spin_lock 和 spin_unlock, 可以操作自旋锁. 有其他几个函
+数, 然而, 有类似的名子和用途. 我们现在会展示全套. 这个讨论将带我们到一个我们无
+法在几章内适当涵盖的地方; 自旋锁 API 的完整理解需要对中断处理和相关概念的理解.
+实际上有 4 个函数可以加锁一个自旋锁:
+	void spin_lock(spinlock_t *lock);
+	void spin_lock_irqsave(spinlock_t *lock, unsigned long flags);
+	void spin_lock_irq(spinlock_t *lock);
+	void spin_lock_bh(spinlock_t *lock)
+	
+我们已经看到自旋锁spin_lock如何工作. spin_loc_irqsave 禁止中断(只在本地处理器)在获得自
+旋锁之前; 之前的中断状态保存在 flags 里. 如果你绝对确定在你的处理器上没有禁止
+中断的(或者, 换句话说, 你确信你应当在你释放你的自旋锁时打开中断), 你可以使用
+spin_lock_irq 代替, 并且不必保持跟踪 flags. 最后, spin_lock_bh 在获取锁之前禁
+止软件中断, 但是硬件中断留作打开的.
+
+如果你有一个可能被在(硬件或软件)中断上下文运行的代码获得的自旋锁, 你必须使用一
+种 spin_lock 形式来禁止中断. 其他做法可能迟早死锁系统, 如果你不在硬件中断处
+理里存取你的锁, 但是你通过软件中断(例如, 在一个 tasklet 运行的代码) 你可以使用
+spin_lock_bh 来安全地避免死锁, 而仍然允许硬件中断被服务.
+
+也有 4 个方法来释放一个自旋锁; 你用的那个必须对应你用来获取锁的函数.
+	void spin_unlock(spinlock_t *lock);
+	void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags);
+	void spin_unlock_irq(spinlock_t *lock);
+	void spin_unlock_bh(spinlock_t *lock);
+	
+每个 spin_unlock 变体恢复由对应的 spin_lock 函数锁做的工作. 传递给
+spin_unlock_irqrestore 的 flags 参数必须是传递给 spin_lock_irqsave 的同一个变
+量. 你必须也调用 spin_lock_irqsave 和 spin_unlock_irqrestore 在同一个函数里.
+否则, 你的代码可能破坏某些体系.
+
+还有一套非阻塞的自旋锁操作:
+	int spin_trylock(spinlock_t *lock);
+	int spin_trylock_bh(spinlock_t *lock);
+这些函数成功时返回非零( 获得了锁 ), 否则 0. 没有"try"版本来禁止中断.
+
+

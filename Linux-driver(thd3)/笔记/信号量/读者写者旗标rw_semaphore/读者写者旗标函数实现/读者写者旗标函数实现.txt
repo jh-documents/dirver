@@ -1,0 +1,35 @@
+Linux 内核为这种情况提供一个特殊的旗标类型称为 rwsem 
+(或者" reader/writersemaphore"). rwsem 在驱动中的使用相对较少, 但是有时它们有用.
+
+一.
+	1）必须包含 <linux/rwsem.h>
+	2）读者写者旗标 的相关数据类型是struct rw_semaphore;
+
+二.
+	1) 一个 rwsem 必须在运行时显式初始化:
+	void init_rwsem(struct rw_semaphore *sem);
+	2）一个新初始化的 rwsem 对出现的下一个任务( 读者或者写者 )是可用的. 对需要只读存
+	取的代码的接口是:
+	void down_read(struct rw_semaphore *sem);
+	int down_read_trylock(struct rw_semaphore *sem);
+	void up_read(struct rw_semaphore *sem);
+	对 down_read 的调用提供了对被保护资源的只读存取, 与其他读者可能地并发地存取.
+	注意 down_read 可能将调用进程置为不可中断的睡眠. down_read_trylock 如果读存取
+	是不可用时不会等待; 如果被准予存取它返回非零, 否则是 0. 注意 down_read_trylock
+	的惯例不同于大部分的内核函数, 返回值 0 指示成功. 一个使用 down_read 获取的
+	rwsem 必须最终使用 up_read 释放.
+	
+	3）读者的接口类似:
+	void down_write(struct rw_semaphore *sem);
+	int down_write_trylock(struct rw_semaphore *sem);
+	void up_write(struct rw_semaphore *sem);
+	void downgrade_write(struct rw_semaphore *sem);
+	down_write, down_write_trylock, 和 up_write 全部就像它们的读者对应部分, 除了,
+	当然, 它们提供写存取. 如果你处于这样的情况, 需要一个写者锁来做一个快速改变, 接
+	着一个长时间的只读存取, 你可以使用 downgrade_write 在一旦你已完成改变后允许其
+	他读者进入.
+	一个 rwsem 允许一个读者或者不限数目的读者来持有旗标. 写者有优先权; 当一个写者
+	试图进入临界区, 就不会允许读者进入直到所有的写者完成了它们的工作. 这个实现可能
+	导致读者饥饿 -- 读者被长时间拒绝存取 -- 如果你有大量的写者来竞争旗标. 由于这个
+	原因, rwsem 最好用在很少请求写的时候, 并且写者只占用短时间.
+	

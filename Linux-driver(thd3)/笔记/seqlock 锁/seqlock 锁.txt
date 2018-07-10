@@ -1,0 +1,47 @@
+2.6 内核包含了一对新机制打算来提供快速地, 无锁地存取一个共享资源. seqlock 在这
+种情况下工作, 要保护的资源小, 简单, 并且常常被存取, 并且很少写存取但是必须要快.
+基本上, 它们通过允许读者释放对资源的存取, 但是要求这些读者来检查与写者的冲突而
+工作, 并且当发生这样的冲突时, 重试它们的存取. seqlock 通常不能用在保护包含指针
+的数据结构, 因为读者可能跟随着一个无效指针而写者在改变数据结构.
+
+
+seqlock 定义在 <linux/seqlock.h>. 有 2 个通常的方法来初始化一个 seqlock( 有
+seqlock_t 类型 ):
+seqlock_t lock1 = SEQLOCK_UNLOCKED;
+seqlock_t lock2;
+seqlock_init(&lock2);
+
+读存取通过在进入临界区入口获取一个(无符号的)整数序列来工作. 在退出时, 那个序列
+值与当前值比较; 如果不匹配, 读存取必须重试. 结果是, 读者代码象下面的形式:
+
+unsigned int seq;
+do {
+	seq = read_seqbegin(&the_lock);
+} while read_seqretry(&the_lock, seq);
+
+这个类型的锁常常用在保护某种简单计算, 需要多个一致的值. 如果这个计算最后的测试
+表明发生了一个并发的写, 结果被简单地丢弃并且重新计算.
+
+如果你的 seqlock 可能从一个中断处理里存取, 你应当使用 IRQ 安全的版本来代替:
+unsigned int read_seqbegin_irqsave(seqlock_t *lock, unsigned long flags);
+int read_seqretry_irqrestore(seqlock_t *lock, unsigned int seq, unsigned long
+flags);
+
+写者必须获取一个排他锁来进入由一个 seqlock 保护的临界区. 为此, 调用:
+void write_seqlock(seqlock_t *lock);
+
+写锁由一个自旋锁实现, 因此所有的通常的限制都适用. 调用:
+void write_sequnlock(seqlock_t *lock);
+
+来释放锁. 因为自旋锁用来控制写存取, 所有通常的变体都可用:
+void write_seqlock_irqsave(seqlock_t *lock, unsigned long flags);
+void write_seqlock_irq(seqlock_t *lock);
+void write_seqlock_bh(seqlock_t *lock);
+
+void write_sequnlock_irqrestore(seqlock_t *lock, unsigned long flags);
+void write_sequnlock_irq(seqlock_t *lock);
+void write_sequnlock_bh(seqlock_t *lock);
+还有一个 write_tryseqlock 在它能够获得锁时返回非零.
+
+
+

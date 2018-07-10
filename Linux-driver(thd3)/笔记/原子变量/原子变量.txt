@@ -1,0 +1,55 @@
+有时, 一个共享资源是一个简单的整数值. 假设你的驱动维护一个共享变量 n_op, 它告
+知有多少设备操作目前未完成. 正常地, 即便一个简单的操作例如:
+
+n_op++;
+
+可能需要加锁. 某些处理器可能以原子的方式进行那种递减, 但是你不能依赖它. 但是一
+个完整的加锁体制对于一个简单的整数值看来过分了. 对于这样的情况, 内核提供了一个
+原子整数类型称为 atomic_t, 定义在 <asm/atomic.h>.
+
+一个 atomic_t 持有一个 int 值在所有支持的体系上. 但是, 因为这个类型在某些处理
+器上的工作方式, 整个整数范围可能不是都可用的; 因此, 你不应当指望一个 atomic_t
+
+持有多于 24 位. 下面的操作为这个类型定义并且保证对于一个 SMP 计算机的所有处理
+器来说是原子的. 操作是非常快的, 因为它们在任何可能时编译成一条单个机器指令.
+
+void atomic_set(atomic_t *v, int i);
+atomic_t v = ATOMIC_INIT(0);
+
+设置原子变量 v 为整数值 i. 你也可在编译时使用宏定义 ATOMIC_INIT 初始化原子值.
+int atomic_read(atomic_t *v);
+返回 v 的当前值.
+void atomic_add(int i, atomic_t *v);
+
+由 v 指向的原子变量加 i. 返回值是 void, 因为有一个额外的开销来返回新值,
+并且大部分时间不需要知道它.
+void atomic_sub(int i, atomic_t *v);
+从 *v 减去 i.
+void atomic_inc(atomic_t *v);
+void atomic_dec(atomic_t *v);
+
+递增或递减一个原子变量.
+int atomic_inc_and_test(atomic_t *v);
+int atomic_dec_and_test(atomic_t *v);
+int atomic_sub_and_test(int i, atomic_t *v);
+
+进行一个特定的操作并且测试结果; 如果, 在操作后, 原子值是 0, 那么返回值是
+真; 否则, 它是假. 注意没有 atomic_add_and_test.
+int atomic_add_negative(int i, atomic_t *v);
+加整数变量 i 到 v. 如果结果是负值返回值是真, 否则为假.
+
+int atomic_add_return(int i, atomic_t *v);
+int atomic_sub_return(int i, atomic_t *v);
+int atomic_inc_return(atomic_t *v);
+int atomic_dec_return(atomic_t *v);
+
+就像 atomic_add 和其类似函数, 除了它们返回原子变量的新值给调用者.
+如同它们说过的, atomic_t 数据项必须通过这些函数存取. 如果你传递一个原子项给一
+个期望一个整数参数的函数, 你会得到一个编译错误.
+
+你还应当记住, atomic_t 值只在当被置疑的量真正是原子的时候才起作用. 需要多个
+atomic_t 变量的操作仍然需要某种其他种类的加锁. 考虑一下下面的代码:
+atomic_sub(amount, &first_atomic);
+atomic_add(amount, &second_atomic);
+从第一个原子值中减去 amount, 但是还没有加到第二个时, 存在一段时间. 如果事情的
+这个状态可能产生麻烦给可能在这 2 个操作之间运行的代码, 某种加锁必须采用.

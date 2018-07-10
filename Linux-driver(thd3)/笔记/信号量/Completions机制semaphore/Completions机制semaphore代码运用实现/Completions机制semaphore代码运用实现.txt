@@ -1,0 +1,25 @@
+实现这个行为的代码是:
+DECLARE_COMPLETION(comp);
+
+ssize_t complete_read (struct file *filp, char __user *buf, size_t count,loff_t *pos)
+{
+	printk(KERN_DEBUG "process %i (%s) going to sleep\n",current->pid,
+	current->comm);
+	wait_for_completion(&comp);
+	printk(KERN_DEBUG "awoken %i (%s)\n", current->pid, current->comm);
+	return 0; /* EOF */
+}
+
+ssize_t complete_write (struct file *filp, const char __user *buf, size_t count, loff_t *pos)
+{
+	printk(KERN_DEBUG "process %i (%s) awakening the readers...\n", current->pid, current->comm);
+	complete(&comp);
+	return count; /* succeed, to avoid retrial */
+}
+
+有多个进程同时从这个设备"读"是有可能的. 每个对设备的写将确切地使一个读操作完成,但是没有办法知道会是哪个.
+completion 机制的典型使用是在模块退出时与内核线程的终止一起. 在这个原型例子里,
+一些驱动的内部工作是通过一个内核线程在一个 while(1) 循环中进行的. 当模块准备好
+被清理时, exit 函数告知线程退出并且等待结束. 为此目的, 内核包含一个特殊的函数
+给线程使用:
+	void complete_and_exit(struct completion *c, long retval);

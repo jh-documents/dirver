@@ -1,0 +1,44 @@
+让我们在看看这个结构:
+struct scull_dev {
+	struct scull_qset *data; /* Pointer to first quantum set */
+	int quantum; /* the current quantum size */
+	int qset; /* the current array size */
+	unsigned long size; /* amount of data stored here */
+	unsigned int access_key; /* used by sculluid and scullpriv */
+	struct semaphore sem; /* mutual exclusion semaphore */
+	struct cdev cdev; /* Char device structure */
+};
+
+
+到结构的底部是一个称为 sem 的成员, 当然, 它是我们的旗标. 我们已经选择为每个虚
+拟 scull 设备使用单独的旗标. 使用一个单个的全局的旗标也可能会是同样正确. 通常
+各种 scull 设备不共享资源, 然而, 并且没有理由使一个进程等待, 而另一个进程在使
+用不同 scull 设备. 不同设备使用单独的旗标允许并行进行对不同设备的操作, 因此,
+提高了性能.
+旗标在使用前必须初始化. scull 在加载时进行这个初始化, 在这个循环中:
+for (i = 0; i < scull_nr_devs; i++) {
+	scull_devices[i].quantum = scull_quantum;
+	scull_devices[i].qset = scull_qset;
+	init_MUTEX(&scull_devices[i].sem);
+	scull_setup_cdev(&scull_devices[i], i);
+}
+注意, 旗标必须在 scull 设备对系统其他部分可用前初始化. 因此, init_MUTEX 在
+scull_setup_cdev 前被调用. 以相反的次序进行这个操作可能产生一个竞争情况, 旗标
+可能在它准备好之前被存取.
+下一步, 我们必须浏览代码, 并且确认在没有持有旗标时没有对 scull_dev 数据结构的
+存取. 因此, 例如, scull_write 以这个代码开始:
+if (down_interruptible(&dev->sem))
+ return -ERESTARTSYS;
+注意对 down_interruptible 返回值的检查; 如果它返回非零, 操作被打断了. 在这个情
+况下通常要做的是返回 -ERESTARTSYS. 看到这个返回值后, 内核的高层要么从头重启这
+个调用要么返回这个错误给用户. 如果你返回 -ERESTARTSYS, 你必须首先恢复任何用户
+可见的已经做了的改变, 以保证当重试系统调用时正确的事情发生. 如果你不能以这个方
+式恢复, 你应当替之返回 -EINTR.
+scull_write 必须释放旗标, 不管它是否能够成功进行它的其他任务. 如果事事都顺利,
+执行落到这个函数的最后几行:
+out:
+up(&dev->sem);
+return retval;
+这个代码释放旗标并且返回任何需要的状态. 在 scull_write 中有几个地方可能会出错;
+这些地方包括内存分配失败或者在试图从用户空间拷贝数据时出错. 在这些情况中, 代码
+进行了一个 goto out, 以确保进行正确的清理.

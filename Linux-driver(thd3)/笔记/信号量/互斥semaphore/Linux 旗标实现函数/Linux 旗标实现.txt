@@ -1,0 +1,51 @@
+一.
+	1）内核代码必须包含 <asm/semaphore.h>
+	2）相关的类型是 struct semaphore;
+二.
+	1) 实际旗标可以用几种方法来声明和初始化. 一种是直接创建一个旗标, 
+	接着使用 sema_init 来设定它: 
+	void sema_init(struct semaphore *sem, int val); 这里 val 是安排给旗标的初始值
+	sem它是我们的旗标;
+	
+	2) 然而, 通常旗标以互斥锁的模式使用. 为使这个通用的例子更容易些内核提供了一套帮助函数和宏定义. 
+	因此, 一个互斥锁可以声明和初始化, 使用下面的一种:
+	DECLARE_MUTEX(name);
+	DECLARE_MUTEX_LOCKED(name);
+	结果是一个旗标变量( 称为 name ), 初始化为 1 ( 使用 DECLARE_MUTEX ) 或者	0 (使用 DECLARE_MUTEX_LOCKED ).
+	在后一种情况中, 互斥锁开始就是上锁的状态; 在允许任何线程存取之前将不得不显式解锁它.
+	
+	3） 如果互斥锁必须在运行时间初始化( 这是如果动态分配它的情况, 举例来说), 使用下列
+	中的一个:
+	void init_MUTEX(struct semaphore *sem);
+	void init_MUTEX_LOCKED(struct semaphore *sem);
+	
+	4）在 Linux 世界中, P 函数称为 down -- 或者这个名子的某个变体. 这里, "down" 指的
+	是这样的事实, 这个函数递减旗标的值, 并且, 也许在使调用者睡眠一会儿来等待旗标变
+	可用之后, 给予对被保护资源的存取. 有 3 个版本的 down:
+	void down(struct semaphore *sem);
+	int down_interruptible(struct semaphore *sem);
+	int down_trylock(struct semaphore *sem);
+	
+	down 递减旗标值并且等待需要的时间（不可中断）.
+	down_interruptible 同样, 但是操作是可中断的.
+	这个可中断的版本几乎一直是你要的那个; 它允许一个在等待一个旗标的用户空间进程被
+	用户中断. 作为一个通用的规则, 你不想使用不可中断的操作, 除非实在是没有选择. 不
+	可中断操作是一个创建不可杀死的进程( 在 ps 中见到的可怕的 "D 状态" )和惹恼你的
+	用户的好方法, 使用 down_interruptible 需要一些格外的小心, 但是, 如果操作是可中
+	断的, 函数返回一个非零值, 并且调用者不持有旗标. 正确的使用 down_interruptible
+	需要一直检查返回值并且针对性地响应.
+	最后的版本 ( down_trylock ) 从不睡眠; 如果旗标在调用时不可用, down_trylock 立
+	刻返回一个非零值.
+	一旦一个线程已经成功调用 down 各个版本中的一个, 就说它持有着旗标(或者已经"取得
+	"或者"获得"旗标). 这个线程现在有权力存取这个旗标保护的临界区. 当这个需要互斥的
+	操作完成时, 旗标必须被返回. V 的 Linux 对应物是 up:
+	
+	4） void up(struct semaphore *sem); 一旦 up 被调用, 调用者就不再拥有旗标.
+	
+	如你所愿, 要求获取一个旗标的任何线程, 使用一个(且只能一个)对 up 的调用释放它.
+	在错误路径中常常需要特别的小心; 如果在持有一个旗标时遇到一个错误, “旗标必须在返
+	回错误状态给调用者之前释放旗标”. 没有释放旗标是容易犯的一个错误; 这个结果( 进程
+	挂在看来无关的地方 )可能是难于重现和跟踪的.
+	
+	
+	

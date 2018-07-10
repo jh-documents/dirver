@@ -1,0 +1,4 @@
+1） kmalloc 分配内存
+	原因:
+2） copy_from_user，copy_to_user
+	原因:

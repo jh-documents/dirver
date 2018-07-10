@@ -1,0 +1,30 @@
+一.
+	1）为使用 completion, 你的代码必须包含 <linux/completion.h>
+	
+二.
+	1）一个 completion 可被创建, 使用:
+	DECLARE_COMPLETION(my_completion);
+	或者, 如果 completion 必须动态创建和初始化:
+	struct completion my_completion; /* ... */
+	init_completion(&my_completion);
+	
+	2）等待 completion 是一个简单事来调用:
+	void wait_for_completion(struct completion *c);
+	注意这个函数进行一个不可打断的等待. 如果你的代码调用 wait_for_completion 并且
+	没有人完成这个任务, 结果会是一个不可杀死的进程.
+	
+	3）另一方面, 真正的 completion 事件可能通过调用下列之一来发出:
+	void complete(struct completion *c);
+	void complete_all(struct completion *c);
+	如果多于一个线程在等待同一个 completion 事件, 这 2 个函数做法不同. complete 只
+	唤醒一个等待的线程, 而 complete_all 允许它们所有都继续. 在大部分情况下, 只有一
+	个等待者, 这 2 个函数将产生一致的结果.
+	
+	4）一个 completion 正常地是一个单发设备; 使用一次就放弃. 然而, 如果采取正确的措施
+	重新使用 completion 结构是可能的. 如果没有使用 complete_all, 重新使用一个
+	completion 结构没有任何问题, 只要对于发出什么事件没有模糊. 如果你使用
+	complete_all, 然而, 你必须在重新使用前重新初始化 completion 结构. 宏定义:
+	INIT_COMPLETION(struct completion c);
+	可用来快速进行这个初始化.
+	
+	
